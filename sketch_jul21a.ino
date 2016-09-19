@@ -1,7 +1,7 @@
 #include "ManchesterGlobal.h"
 #include "ManchesterRX.h"
 
-volatile uint32_t samples = 0;
+volatile uint64_t samples = 0;
 
 volatile uint8_t samplesReady = 0;
 
@@ -19,37 +19,33 @@ int toggle = 0;
 
 void setup(){
    pinMode(LED, OUTPUT);
+   pinMode(AN_PIN, OUTPUT);
    pinMode(RX_PIN, INPUT);
+   pinMode(DG_PIN, INPUT);
    initRX();
-   Serial.begin(9600);
+   Serial.begin(250000);
 }
 
 void loop(){
    struct Queue q;
    q.size = 0;
    uint16_t chksm;
+   
    startRX();
-   Serial.println("Preambul done!");        
+   Serial.println("0");        
 }
 
 void initRX(void)
 {    
-    /**
-     * Enable pin change interrupt
-     */
-    *digitalPinToPCMSK(RX_PIN) |= bit (digitalPinToPCMSKbit(RX_PIN));  // enable pin
-    PCIFR  |= bit (digitalPinToPCICRbit(RX_PIN)); // clear any outstanding interrupt
-    PCICR  |= bit (digitalPinToPCICRbit(RX_PIN)); // enable interrupt for the group
-    
     TCCR1A = 0;     // set entire TCCR1A register to 0
     TCCR1B = 0;     // same for TCCR1B
- 
+  
     // set compare match register to desired timer count:
-    OCR1A = SAMPLE_TIME * 1.6667;
+    OCR1A = 200;
+    
+    TCCR1B |= (1 << CS11);
     // turn on CTC mode:
     TCCR1B |= (1 << WGM12);
-    // Set CS10 and CS12 bits for 1024 prescaler:
-    TCCR1B |= (1 << CS11);
     // enable timer compare interrupt:
     TIMSK1 |= (1 << OCIE1A);
     sei();          // enable global interrupts
@@ -125,9 +121,6 @@ void startRX(void)
     
     //SET_BIT(PORTB,LED);
     
-    /* Enable global interrupts */
-    asm("sei");
-    
     /* Reset */
     //TCNT0 = TCNT1 = 0;
     
@@ -140,6 +133,8 @@ void startRX(void)
     
     /* Reset this. Otherwise all RX attempts will fail after the first one. Not sure why. */
     samples = 0;
+
+    int cycles = 0;
     
     /* receiving becomes false if the connection times out, so this will not go on forever */
     while (receiving)
@@ -151,46 +146,58 @@ void startRX(void)
             
             sampleCount = 3;
             
+            Serial.println(preambleBit);
             /* The preamble consists of 6 low bits (10) and 2 high bits (01), everything
              else or any other order than that resets the counter values to 0 */
+
+//            if (preambleBit == 0b1010) {
+//              if (++lows > 6) {
+//                break;
+//              }
+//            }
+//            else {
+//              lows = 0;
+//            }
+//
+//            continue;
             
-            if (preambleBit == MAN_LOW)
-            {
-                if (!highs) ++lows;
-                
-                else lows = highs = 0;
-            }
-            
-            else if (preambleBit == MAN_HIGH)
-            {
-                if (lows >= 6)
-                {
-                    if (++highs >= 2) break;
-                }
-                
-                else lows = highs = 0;
-            }
-            
-            else
-            {
-                lows = highs = 0;
-                
-                /*
-                 * If there's a one-sample error, make the next samples finish earlier so the
-                 * next sampling starts one sample earlier. This means that it takes at most
-                 * 3 samplings to get valid bits. The timing is not a problem since the Pin
-                 * change interrupt makes sure that any pin changes occur exactly between two
-                 * samples, therefore there can only be sample errors and not timing errors
-                 * (I think).
-                 */
-                
-                sampleCount = 2;
-            }
+//            if (preambleBit == MAN_LOW)
+//            {
+//                if (!highs) ++lows;
+//                
+//                else lows = highs = 0;
+//            }
+//            
+//            else if (preambleBit == MAN_HIGH)
+//            {
+//                if (lows >= 6)
+//                {
+//                    if (++highs >= 2) break;
+//                }
+//                
+//                else lows = highs = 0;
+//            }
+//            
+//            else
+//            {
+//                lows = highs = 0;
+//                
+//                /*
+//                 * If there's a one-sample error, make the next samples finish earlier so the
+//                 * next sampling starts one sample earlier. This means that it takes at most
+//                 * 3 samplings to get valid bits. The timing is not a problem since the Pin
+//                 * change interrupt makes sure that any pin changes occur exactly between two
+//                 * samples, therefore there can only be sample errors and not timing errors
+//                 * (I think).
+//                 */
+//                
+//                sampleCount = 2;
+//            }
         }
     }
-    
+    Serial.println("here");
     /* Normal sampling now */
-    sampleCount = DATA_SAMPLES - 1;
+    sampleCount = 3;
 }
 
 void stopRX(void)
@@ -228,19 +235,15 @@ uint8_t interpretSamples(const uint32_t samps)
 
 ISR(TIMER1_COMPA_vect)
 {
-//  /* Write to a digital pin so that we can confirm our timer */
-      digitalWrite(LED, toggle == 0 ? HIGH : LOW);
-      toggle = ~toggle;
-     int rawData = analogRead(RX_PIN);
-     int sample = rawData > levelBit ? 1 : 0;
-     //Serial.println(F_CPU);
-     //Serial.println(sample);
-    /* If the current sample reads high, set the current bit in the samples */
-    if (sample)
+     //int rawData = analogRead(RX_PIN);
+     //int sample = rawData > levelBit ? 1 : 0;
+     int sample = digitalRead(DG_PIN);
+     digitalWrite(LED, sample == 0 ? HIGH : LOW);
+     /* If the current sample reads high, set the current bit in the samples */
+    if (sample == 1)
     {
         /* Reset timer now, after sampling */
         //TCNT1 = 1;
-        
         SET_BIT(samples,sampleCount);
     }
     
@@ -249,14 +252,12 @@ ISR(TIMER1_COMPA_vect)
     {
         /* Reset timer now, after sampling */
         //TCNT1 = 1;
-        
         CLEAR_BIT(samples,sampleCount);
     }
-    
     /* If the bit is finished, set the samplesReady flag */
     if (!sampleCount--)
     {
       samplesReady = 1;
-      sampleCount = DATA_SAMPLES - 1;
+      sampleCount = 3; //DATA_SAMPLES - 1;
     }
 }

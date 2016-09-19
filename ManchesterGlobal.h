@@ -15,7 +15,7 @@
 /* The time for one bit in µs/cycles */
 #define BIT_TIME 400
 
-#define HALF_TIME 200
+#define HALF_TIME 240
 
 /* The time between samples in µs/cycles */
 #define SAMPLE_TIME 100

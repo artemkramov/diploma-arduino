@@ -13,6 +13,10 @@
 
 #define RX_PIN A3
 
+#define AN_PIN A5
+
+#define DG_PIN 4
+
 #define LED 13
 
 #define MAN_HIGH 0b0011
