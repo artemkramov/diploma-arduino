@@ -8,7 +8,7 @@ void setup() {
   TCCR1B = 0;     // same for TCCR1B
 
   // set compare match register to desired timer count:
-  OCR1A = 400;
+  OCR1A = 200;
   
   TCCR1B |= (1 << CS11);
   // turn on CTC mode:
